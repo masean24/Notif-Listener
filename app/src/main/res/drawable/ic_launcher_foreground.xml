@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- LAYER 1: Ambient Drop Shadow for the Floating Plate -->
+    <path
+        android:fillColor="#3D000000"
+        android:pathData="M34,31 h40 C78.3,31 82,34.7 82,39 v40 C82,83.3 78.3,87 74,87 h-40 C29.7,87 26,83.3 26,79 v-40 C26,34.7 29.7,31 34,31 z" />
+
+    <!-- LAYER 2: Left/Right Broadcast/Notification Waves (Google Colors) -->
+    <!-- Left Radiating Wave (Google Blue) with generous width and round cap -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF4285F4"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:pathData="M 20,41 A 19,19 0 0 0 20,67" />
+    
+    <!-- Right Radiating Wave (Google Green) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF34A853"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:pathData="M 88,41 A 19,19 0 0 1 88,67" />
+
+
+    <!-- LAYER 3: Frosted Glass Panel Fill (Elegant Glassmorphism Base) -->
+    <path
+        android:pathData="M33,27 h42 C78.3,27 81,29.7 81,33 v42 C81,78.3 78.3,81 75,81 h-42 C29.7,81 27,78.3 27,75 v-42 C27,29.7 29.7,27 33,27 z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="27"
+                android:startY="27"
+                android:endX="81"
+                android:endY="81">
+                <!-- Gorgeous glass translucency overlay (22% white to 6% white) -->
+                <item android:offset="0.0" android:color="#36FFFFFF" />
+                <item android:offset="1.0" android:color="#0FFFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+
+    <!-- LAYER 4: Refractive Specular Highlight Border (Specular Stroke) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeWidth="1.2"
+        android:pathData="M33,27 h42 C78.3,27 81,29.7 81,33 v42 C81,78.3 78.3,81 75,81 h-42 C29.7,81 27,78.3 27,75 v-42 C27,29.7 29.7,27 33,27 z">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:type="linear"
+                android:startX="27"
+                android:startY="27"
+                android:endX="81"
+                android:endY="81">
+                <!-- Clean frosted highlight edges -->
+                <item android:offset="0.0" android:color="#B2FFFFFF" /> <!-- High opacity at top-left -->
+                <item android:offset="0.4" android:color="#40FFFFFF" />
+                <item android:offset="1.0" android:color="#1AFFFFFF" /> <!-- Low opacity at bottom-right -->
+            </gradient>
+        </aapt:attr>
+    </path>
+
+
+    <!-- LAYER 5: Central Matte-White Minimalist Notification Bell -->
+    
+    <!-- Top Bell Loop -->
+    <path
+        android:fillColor="#F5F7FA"
+        android:pathData="M54,34 c1.38,0 2.5,1.12 2.5,2.5 s-1.12,2.5 -2.5,2.5 s-2.5,-1.12 -2.5,-2.5 s1.12,-2.5 2.5,-2.5 z M54,35 a1.5,1.5 0 1,0 0.001,3.001 a1.5,1.5 0 0,0 -0.001,-3.001 z" />
+
+    <!-- Bell Dome Body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M43.5,57 c0,-5.8 4.2,-10.5 9.5,-11 v3 h-20.5 v-3 z" />
+
+    <!-- Bell Bottom Rim / Collar (Google Yellow #FBBC05 details at the bottom join) -->
+    <path
+        android:fillColor="#FFFBBC05"
+        android:pathData="M40.5,60h27v2.2h-27z" />
+
+    <!-- Clapper / Clink (Centered Bottom Ball) -->
+    <path
+        android:fillColor="#F0F4F8"
+        android:pathData="M54,62.5m-3.5,0a3.5,3.5 0 1,1 7,0a3.5,3.5 0 1,1 -7,0" />
+
+
+    <!-- LAYER 6: Floating Google Notification Badge (Red Alert Dot) -->
+    <path
+        android:pathData="M73,35m-4.5,0a4.5,4.5 0 1,1 9,0a4.5,4.5 0 1,1 -9,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="73"
+                android:centerY="35"
+                android:gradientRadius="4.5">
+                <item android:offset="0.0" android:color="#FFFF5252" /> <!-- Bright glowing red -->
+                <item android:offset="1.0" android:color="#FFEA4335" /> <!-- Google Red -->
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Accent Highlight Dot on Badge for Depth -->
+    <path
+        android:fillColor="#A9FFFFFF"
+        android:pathData="M71.5,33.5m-1.2,0a1.2,1.2 0 1,1 2.4,0a1.2,1.2 0 1,1 -2.4,0" />
+
+</vector>

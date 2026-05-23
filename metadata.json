@@ -1,0 +1,6 @@
+{
+  "name": "QRIS Notification Bridge",
+  "description": "Native payment notification monitor tool which forwards financial receipts to your custom backend webhooks and can call out amounts audibly.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
