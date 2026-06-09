@@ -49,9 +49,15 @@ class QrisRepository(private val db: AppDatabase) {
         db.profileDedupeLogDao().clearAllDedupeLogs()
     }
 
+    suspend fun pruneOldLogs(retentionDays: Int = 30) {
+        val cutoff = System.currentTimeMillis() - retentionDays.coerceAtLeast(1) * 24L * 60L * 60L * 1000L
+        db.webhookLogDao().deleteFinishedLogsOlderThan(cutoff)
+        db.notificationLogDao().deleteLogsOlderThan(cutoff)
+        db.profileDedupeLogDao().deleteDedupeLogsOlderThan(cutoff)
+    }
+
     suspend fun getPendingWebhookLogs(): List<WebhookLog> = db.webhookLogDao().getPendingLogs()
     suspend fun insertWebhookLog(log: WebhookLog): Long = db.webhookLogDao().insertWebhookLog(log)
     suspend fun updateWebhookLog(log: WebhookLog) = db.webhookLogDao().updateWebhookLog(log)
     suspend fun getLogsForNotification(notificationId: Long): List<WebhookLog> = db.webhookLogDao().getLogsForNotification(notificationId)
 }
-

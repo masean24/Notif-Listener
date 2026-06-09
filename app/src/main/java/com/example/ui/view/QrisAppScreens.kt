@@ -3,6 +3,8 @@ package com.example.ui.view
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
@@ -102,6 +104,7 @@ import com.example.data.model.NotificationLog
 import com.example.data.model.WebhookLog
 import com.example.data.model.WebhookTarget
 import com.example.data.model.RoutingProfile
+import com.example.ui.viewmodel.InstalledAppOption
 import com.example.ui.viewmodel.QrisViewModel
 import com.example.util.OemAutoStartHelper
 import kotlinx.coroutines.delay
@@ -219,6 +222,7 @@ fun DashboardTab(viewModel: QrisViewModel) {
     // Auto-refresh states periodically
     var isAccessGranted by remember { mutableStateOf(false) }
     var isBatteryOptimizingOff by remember { mutableStateOf(false) }
+    var isInternetAvailable by remember { mutableStateOf(false) }
     
     fun refreshSystemStates() {
         val cn = ComponentName(context, "com.example.service.QrisNotificationListenerService")
@@ -231,6 +235,11 @@ fun DashboardTab(viewModel: QrisViewModel) {
         } else {
             true
         }
+
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val network = cm?.activeNetwork
+        val capabilities = cm?.getNetworkCapabilities(network)
+        isInternetAvailable = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
     }
 
     LaunchedEffect(Unit) {
@@ -299,10 +308,11 @@ fun DashboardTab(viewModel: QrisViewModel) {
         )
 
         // 2. Webhook target status
-        val targetsOk = webhookTargets.isNotEmpty()
+        val activeTargetCount = webhookTargets.count { it.enabled }
+        val targetsOk = activeTargetCount > 0
         StatusIndicatorCard(
             title = "Konfigurasi Webhook",
-            description = if (targetsOk) "${webhookTargets.size} target diaktifkan." else "Belum ada tujuan webhook yang ditambahkan.",
+            description = if (targetsOk) "$activeTargetCount target aktif siap menerima payload." else "Belum ada tujuan webhook aktif.",
             isOk = targetsOk,
             actionLabel = if (targetsOk) "Lihat Target" else "Atur Sekarang",
             onAction = {
@@ -315,16 +325,24 @@ fun DashboardTab(viewModel: QrisViewModel) {
         val listenerActive = isAccessGranted // bound strictly via the listener access
         StatusIndicatorCard(
             title = "Layanan Pemantau (Listener)",
-            description = if (listenerActive) "🟢 Aktif (Latar belakang memantau)" else "🔴 Mati (Izin dinonaktifkan)",
+            description = if (listenerActive) "Aktif. Latar belakang siap memantau notifikasi." else "Mati. Izin akses notifikasi belum aktif.",
             isOk = listenerActive,
             onAction = null,
             tag = "status_listener"
         )
 
+        StatusIndicatorCard(
+            title = "Koneksi Internet",
+            description = if (isInternetAvailable) "Online. Webhook bisa dikirim saat target tersedia." else "Offline. Kiriman akan menunggu retry saat koneksi kembali.",
+            isOk = isInternetAvailable,
+            onAction = null,
+            tag = "status_internet"
+        )
+
         // 4. Battery Optimization status
         StatusIndicatorCard(
             title = "Abaikan Optimasi Baterai",
-            description = if (isBatteryOptimizingOff) "Whitelist aktif (Aman dari pembatasan latar belakang)" else "⚠️ Sistem dapat menghentikan monitor sewaktu-waktu.",
+            description = if (isBatteryOptimizingOff) "Whitelist aktif. Aman dari pembatasan latar belakang." else "Sistem dapat menghentikan monitor sewaktu-waktu.",
             isOk = isBatteryOptimizingOff,
             actionLabel = "Perbaiki",
             onAction = {
@@ -946,6 +964,7 @@ fun FilterTab(viewModel: QrisViewModel) {
     val profiles by viewModel.profiles.collectAsState()
     val webhooks by viewModel.targets.collectAsState()
     val isRoutingModeOnlyFirst by viewModel.isRoutingModeOnlyFirst.collectAsState()
+    val installedApps by viewModel.installedApps.collectAsState()
 
     // For legacy fallback display
     val allowedPackages by viewModel.allowedPackages.collectAsState()
@@ -954,6 +973,11 @@ fun FilterTab(viewModel: QrisViewModel) {
 
     var showEditDialog by remember { mutableStateOf(false) }
     var selectedProfileForEdit by remember { mutableStateOf<com.example.data.model.RoutingProfile?>(null) }
+    var parseTitle by remember { mutableStateOf("Pembayaran Berhasil") }
+    var parseText by remember { mutableStateOf("Anda menerima pembayaran sebesar Rp150.000 dari AHMAD BUDI") }
+    var parseBigText by remember { mutableStateOf("") }
+    var parseAppName by remember { mutableStateOf("GoPay") }
+    val parsePreview by viewModel.parsePreviewResult.collectAsState()
 
     Column(
         modifier = Modifier
@@ -979,6 +1003,62 @@ fun FilterTab(viewModel: QrisViewModel) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Test Parse Notifikasi", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Coba teks notifikasi sebelum dipakai di device real. Ini tidak mengirim payload ke server.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = parseAppName,
+                    onValueChange = { parseAppName = it },
+                    label = { Text("Nama App") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("input_parse_app")
+                )
+                OutlinedTextField(
+                    value = parseTitle,
+                    onValueChange = { parseTitle = it },
+                    label = { Text("Judul Notifikasi") },
+                    modifier = Modifier.fillMaxWidth().testTag("input_parse_title")
+                )
+                OutlinedTextField(
+                    value = parseText,
+                    onValueChange = { parseText = it },
+                    label = { Text("Isi Notifikasi") },
+                    modifier = Modifier.fillMaxWidth().testTag("input_parse_text"),
+                    minLines = 2
+                )
+                OutlinedTextField(
+                    value = parseBigText,
+                    onValueChange = { parseBigText = it },
+                    label = { Text("Big Text (Opsional)") },
+                    modifier = Modifier.fillMaxWidth().testTag("input_parse_big_text"),
+                    minLines = 2
+                )
+                Button(
+                    onClick = { viewModel.previewNotificationParse(parseTitle, parseText, parseBigText, parseAppName) },
+                    modifier = Modifier.fillMaxWidth().testTag("btn_preview_parse")
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Test Parse")
+                }
+                parsePreview?.let { result ->
+                    val amountText = result.amount?.let {
+                        NumberFormat.getCurrencyInstance(Locale("id", "ID")).apply { maximumFractionDigits = 0 }.format(it)
+                    } ?: "Tidak terbaca"
+                    Text("Nominal: $amountText", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                    Text("Pengirim: ${result.sender ?: "Tidak terbaca"}", style = MaterialTheme.typography.bodySmall)
+                    Text("App: ${result.appName}", style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
 
@@ -1234,18 +1314,24 @@ fun FilterTab(viewModel: QrisViewModel) {
                         }
 
                         // Custom TTS or custom template indicators
-                        if (profile.ttsEnabled || !profile.customTemplate.isNullOrBlank()) {
+                        val effectiveTtsMode = profile.ttsMode.ifBlank { if (profile.ttsEnabled) "force_on" else "global" }
+                        if (effectiveTtsMode != "global" || !profile.ttsTemplate.isNullOrBlank() || !profile.customTemplate.isNullOrBlank()) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                if (profile.ttsEnabled) {
+                                if (effectiveTtsMode != "global" || !profile.ttsTemplate.isNullOrBlank()) {
                                     Surface(
                                         color = MaterialTheme.colorScheme.tertiaryContainer,
                                         shape = RoundedCornerShape(6.dp)
                                     ) {
-                                        Text("Kustom TTS Suara", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onTertiaryContainer, fontWeight = FontWeight.Bold)
+                                        val label = when (effectiveTtsMode) {
+                                            "force_on" -> "TTS Paksa Nyala"
+                                            "muted" -> "TTS Mati"
+                                            else -> "Template TTS"
+                                        }
+                                        Text(label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onTertiaryContainer, fontWeight = FontWeight.Bold)
                                     }
                                 }
                                 if (!profile.customTemplate.isNullOrBlank()) {
@@ -1301,6 +1387,8 @@ fun FilterTab(viewModel: QrisViewModel) {
         RoutingProfileEditDialog(
             profile = selectedProfileForEdit,
             webhooks = webhooks,
+            installedApps = installedApps,
+            onRefreshApps = { viewModel.refreshInstalledApps() },
             onDismiss = { showEditDialog = false },
             onSave = { updatedProfile ->
                 if (updatedProfile.id == 0) {
@@ -1318,6 +1406,8 @@ fun FilterTab(viewModel: QrisViewModel) {
 fun RoutingProfileEditDialog(
     profile: com.example.data.model.RoutingProfile?,
     webhooks: List<WebhookTarget>,
+    installedApps: List<InstalledAppOption>,
+    onRefreshApps: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (com.example.data.model.RoutingProfile) -> Unit
 ) {
@@ -1328,8 +1418,11 @@ fun RoutingProfileEditDialog(
     var positiveKeywordsRaw by remember { mutableStateOf(profile?.positiveKeywordsRaw ?: "") }
     var negativeKeywordsRaw by remember { mutableStateOf(profile?.negativeKeywordsRaw ?: "") }
     var customTemplate by remember { mutableStateOf(profile?.customTemplate ?: "") }
-    var ttsEnabled by remember { mutableStateOf(profile?.ttsEnabled ?: false) }
+    var ttsMode by remember {
+        mutableStateOf(profile?.ttsMode ?: if (profile?.ttsEnabled == true) "force_on" else "global")
+    }
     var ttsTemplate by remember { mutableStateOf(profile?.ttsTemplate ?: "") }
+    var showAppPicker by remember { mutableStateOf(false) }
     
     var selectedWebhookIds by remember { 
         mutableStateOf(profile?.webhookTargetIds?.toSet() ?: emptySet()) 
@@ -1351,8 +1444,9 @@ fun RoutingProfileEditDialog(
                                 negativeKeywordsRaw = negativeKeywordsRaw.trim(),
                                 webhookTargetIdsRaw = selectedWebhookIds.joinToString(","),
                                 customTemplate = customTemplate.trim().ifEmpty { null },
-                                ttsEnabled = ttsEnabled,
+                                ttsEnabled = ttsMode == "force_on",
                                 ttsTemplate = ttsTemplate.trim().ifEmpty { null },
+                                ttsMode = ttsMode,
                                 priority = priority.toIntOrNull() ?: 0
                             )
                         )
@@ -1414,6 +1508,17 @@ fun RoutingProfileEditDialog(
                     placeholder = { Text("com.gojek.app, id.dana") },
                     modifier = Modifier.fillMaxWidth()
                 )
+                OutlinedButton(
+                    onClick = {
+                        onRefreshApps()
+                        showAppPicker = true
+                    },
+                    modifier = Modifier.fillMaxWidth().testTag("btn_pick_profile_apps")
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Pilih App dari HP")
+                }
 
                 OutlinedTextField(
                     value = positiveKeywordsRaw,
@@ -1467,28 +1572,35 @@ fun RoutingProfileEditDialog(
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
-                // Custom TTS Settings Section
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Checkbox(
-                        checked = ttsEnabled,
-                        onCheckedChange = { ttsEnabled = it }
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Kustom Pengeras Suara TTS Rute Ini", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                Text("Mode Pengeras Suara Rute:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                listOf(
+                    "global" to "Ikut Global",
+                    "force_on" to "Paksa Nyala",
+                    "muted" to "Matikan"
+                ).forEach { (mode, label) ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { ttsMode = mode }
+                    ) {
+                        RadioButton(
+                            selected = ttsMode == mode,
+                            onClick = { ttsMode = mode },
+                            modifier = Modifier.testTag("radio_profile_tts_$mode")
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(label, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
 
-                if (ttsEnabled) {
-                    OutlinedTextField(
-                        value = ttsTemplate,
-                        onValueChange = { ttsTemplate = it },
-                        label = { Text("Template Suara Khusus Rute") },
-                        placeholder = { Text("Duit masuk {amount} dari {app_name}") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+                OutlinedTextField(
+                    value = ttsTemplate,
+                    onValueChange = { ttsTemplate = it },
+                    label = { Text("Template Suara Khusus Rute (Opsional)") },
+                    placeholder = { Text("Duit masuk {amount} dari {app_name}") },
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 Spacer(modifier = Modifier.height(4.dp))
                 // Custom JSON Template Section
@@ -1505,6 +1617,109 @@ fun RoutingProfileEditDialog(
         },
         modifier = Modifier.testTag("dialog_routing_profile_editor")
     )
+
+    if (showAppPicker) {
+        AppPickerDialog(
+            apps = installedApps,
+            selectedPackages = packagesRaw.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet(),
+            onDismiss = { showAppPicker = false },
+            onConfirm = { selected ->
+                packagesRaw = selected.sorted().joinToString(",")
+                showAppPicker = false
+            }
+        )
+    }
+}
+
+@Composable
+fun AppPickerDialog(
+    apps: List<InstalledAppOption>,
+    selectedPackages: Set<String>,
+    onDismiss: () -> Unit,
+    onConfirm: (Set<String>) -> Unit
+) {
+    var query by remember { mutableStateOf("") }
+    var selected by remember(selectedPackages) { mutableStateOf(selectedPackages) }
+    val filteredApps = apps.filter { app ->
+        query.isBlank() ||
+            app.label.contains(query, ignoreCase = true) ||
+            app.packageName.contains(query, ignoreCase = true)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(onClick = { onConfirm(selected) }, modifier = Modifier.testTag("btn_confirm_app_picker")) {
+                Text("Pakai Pilihan")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Batal")
+            }
+        },
+        title = { Text("Pilih Aplikasi") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text("Cari nama/package app") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("input_app_picker_search")
+                )
+                if (apps.isEmpty()) {
+                    Text(
+                        "Daftar app belum terbaca. Coba buka ulang dialog atau pastikan izin visibilitas package tersedia.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text("${selected.size} app dipilih", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(360.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(filteredApps) { app ->
+                            val checked = selected.contains(app.packageName)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selected = if (checked) {
+                                            selected - app.packageName
+                                        } else {
+                                            selected + app.packageName
+                                        }
+                                    }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = checked,
+                                    onCheckedChange = {
+                                        selected = if (checked) {
+                                            selected - app.packageName
+                                        } else {
+                                            selected + app.packageName
+                                        }
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(app.label, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(app.packageName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        modifier = Modifier.testTag("dialog_app_picker")
+    )
 }
 
 @Composable
@@ -1513,6 +1728,9 @@ fun SpeakerSettingsTab(viewModel: QrisViewModel) {
     val repeatCount by viewModel.speakerRepeat.collectAsState()
     val volume by viewModel.speakerVolume.collectAsState()
     val template by viewModel.speakerTemplate.collectAsState()
+    val language by viewModel.speakerLanguage.collectAsState()
+    val speechRate by viewModel.speakerRate.collectAsState()
+    val pitch by viewModel.speakerPitch.collectAsState()
 
     Column(
         modifier = Modifier
@@ -1560,10 +1778,30 @@ fun SpeakerSettingsTab(viewModel: QrisViewModel) {
                     modifier = Modifier.fillMaxWidth().testTag("input_speaker_template")
                 )
                 Text(
-                    "Variabel: {amount} (nominal rupiah), {app_name} (nama aplikasi pengirim).",
+                    "Variabel: {amount} (nominal rupiah), {app_name} (nama aplikasi pengirim), {sender} (nama pengirim jika terbaca).",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                Text("Bahasa Suara", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                listOf(
+                    "id-ID" to "Indonesia",
+                    "system" to "Default Sistem"
+                ).forEach { (tag, label) ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.setSpeakerLanguage(tag) }
+                    ) {
+                        RadioButton(
+                            selected = language == tag,
+                            onClick = { viewModel.setSpeakerLanguage(tag) },
+                            modifier = Modifier.testTag("radio_speaker_language_$tag")
+                        )
+                        Text(label, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
 
                 // Repetitions
                 Text("Ulangi Suara", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
@@ -1596,6 +1834,22 @@ fun SpeakerSettingsTab(viewModel: QrisViewModel) {
                     onValueChange = { viewModel.setSpeakerVolume(it) },
                     valueRange = 0.0f..1.0f,
                     modifier = Modifier.fillMaxWidth().testTag("slider_volume")
+                )
+
+                Text("Kecepatan Suara: ${(speechRate * 100).toInt()}%", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                Slider(
+                    value = speechRate,
+                    onValueChange = { viewModel.setSpeakerRate(it) },
+                    valueRange = 0.5f..1.8f,
+                    modifier = Modifier.fillMaxWidth().testTag("slider_speaker_rate")
+                )
+
+                Text("Nada Suara: ${(pitch * 100).toInt()}%", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                Slider(
+                    value = pitch,
+                    onValueChange = { viewModel.setSpeakerPitch(it) },
+                    valueRange = 0.5f..1.8f,
+                    modifier = Modifier.fillMaxWidth().testTag("slider_speaker_pitch")
                 )
 
                 // Tester section

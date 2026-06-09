@@ -23,6 +23,9 @@ class SettingsDataStore(private val context: Context) {
         private val SPEAKER_REPEAT_KEY = intPreferencesKey("speaker_repeat")
         private val SPEAKER_VOLUME_KEY = floatPreferencesKey("speaker_volume")
         private val SPEAKER_TEMPLATE_KEY = stringPreferencesKey("speaker_template")
+        private val SPEAKER_LANGUAGE_KEY = stringPreferencesKey("speaker_language")
+        private val SPEAKER_RATE_KEY = floatPreferencesKey("speaker_rate")
+        private val SPEAKER_PITCH_KEY = floatPreferencesKey("speaker_pitch")
         private val ALLOWED_PACKAGES_KEY = stringPreferencesKey("allowed_packages")
         private val POSITIVE_KEYWORDS_KEY = stringPreferencesKey("positive_keywords")
         private val NEGATIVE_KEYWORDS_KEY = stringPreferencesKey("negative_keywords")
@@ -115,6 +118,36 @@ class SettingsDataStore(private val context: Context) {
     suspend fun setSpeakerTemplate(template: String) {
         context.dataStore.edit { preferences ->
             preferences[SPEAKER_TEMPLATE_KEY] = template
+        }
+    }
+
+    val speakerLanguageFlow: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[SPEAKER_LANGUAGE_KEY] ?: "id-ID"
+    }
+
+    suspend fun setSpeakerLanguage(languageTag: String) {
+        context.dataStore.edit { preferences ->
+            preferences[SPEAKER_LANGUAGE_KEY] = languageTag.ifBlank { "id-ID" }
+        }
+    }
+
+    val speakerRateFlow: Flow<Float> = context.dataStore.data.map { preferences ->
+        preferences[SPEAKER_RATE_KEY] ?: 1.0f
+    }
+
+    suspend fun setSpeakerRate(rate: Float) {
+        context.dataStore.edit { preferences ->
+            preferences[SPEAKER_RATE_KEY] = rate.coerceIn(0.5f, 1.8f)
+        }
+    }
+
+    val speakerPitchFlow: Flow<Float> = context.dataStore.data.map { preferences ->
+        preferences[SPEAKER_PITCH_KEY] ?: 1.0f
+    }
+
+    suspend fun setSpeakerPitch(pitch: Float) {
+        context.dataStore.edit { preferences ->
+            preferences[SPEAKER_PITCH_KEY] = pitch.coerceIn(0.5f, 1.8f)
         }
     }
 

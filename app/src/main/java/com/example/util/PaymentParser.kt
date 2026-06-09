@@ -150,12 +150,22 @@ object PaymentParser {
         while (standaloneMatcher.find()) {
             val numStr = standaloneMatcher.group(1) ?: ""
             val parsed = sanitizeAndParse(numStr)
-            if (parsed != null && parsed >= 1000) {
+            if (parsed != null && parsed >= 1000 && hasAmountContext(plainText, standaloneMatcher.start(), standaloneMatcher.end())) {
                 return parsed
             }
         }
 
         return null
+    }
+
+    private fun hasAmountContext(text: String, start: Int, end: Int): Boolean {
+        val from = (start - 32).coerceAtLeast(0)
+        val to = (end + 32).coerceAtMost(text.length)
+        val nearby = text.substring(from, to).lowercase()
+        val amountWords = listOf(
+            "pembayaran", "bayar", "transfer", "masuk", "menerima", "diterima", "sebesar", "senilai", "sejumlah", "nominal", "saldo", "uang"
+        )
+        return amountWords.any { nearby.contains(it) }
     }
 
     private fun sanitizeAndParse(raw: String): Int? {

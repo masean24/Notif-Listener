@@ -23,10 +23,12 @@ import com.example.data.repository.QrisRepository
 import com.example.util.PayloadBuilder
 import com.example.util.PaymentParser
 import com.example.util.TtsManager
+import com.example.util.TtsPolicy
 import com.example.util.WebhookClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.security.MessageDigest
@@ -50,6 +52,7 @@ class QrisNotificationListenerService : NotificationListenerService() {
     }
 
     override fun onDestroy() {
+        serviceScope.cancel()
         ttsManager?.shutdown()
         super.onDestroy()
     }
@@ -219,7 +222,10 @@ class QrisNotificationListenerService : NotificationListenerService() {
                 )
 
                 // Speaki (TTS)
-                val isSpeakEnabled = if (profile.ttsEnabled) true else settingsDataStore.isSpeakerEnabledFlow.first()
+                val ttsMode = profile.ttsMode.ifBlank {
+                    if (profile.ttsEnabled) "force_on" else "global"
+                }
+                val isSpeakEnabled = TtsPolicy.shouldSpeak(ttsMode, profile.ttsEnabled, settingsDataStore.isSpeakerEnabledFlow.first())
                 if (isSpeakEnabled) {
                     val ttsTemplate = if (!profile.ttsTemplate.isNullOrBlank()) {
                         profile.ttsTemplate
@@ -228,16 +234,16 @@ class QrisNotificationListenerService : NotificationListenerService() {
                     }
                     val repeatCount = settingsDataStore.speakerRepeatFlow.first()
                     val ttsVolume = settingsDataStore.speakerVolumeFlow.first()
+                    val ttsLanguage = settingsDataStore.speakerLanguageFlow.first()
+                    val ttsRate = settingsDataStore.speakerRateFlow.first()
+                    val ttsPitch = settingsDataStore.speakerPitchFlow.first()
 
                     val speechText = if (amount != null) {
-                        ttsTemplate
-                            .replace("{amount}", amount.toString())
-                            .replace("{app_name}", appName)
-                            .replace("{sender}", senderName ?: "Pelanggan")
+                        TtsPolicy.renderTemplate(ttsTemplate, amount, appName, senderName)
                     } else {
                         "Ada notifikasi pembayaran dari $appName"
                     }
-                    ttsManager?.speak(speechText, repeatCount, ttsVolume)
+                    ttsManager?.speak(speechText, repeatCount, ttsVolume, ttsLanguage, ttsRate, ttsPitch)
                 }
 
                 // Push to webhooks
@@ -363,16 +369,16 @@ class QrisNotificationListenerService : NotificationListenerService() {
                 val userTemplate = settingsDataStore.speakerTemplateFlow.first()
                 val repeatCount = settingsDataStore.speakerRepeatFlow.first()
                 val ttsVolume = settingsDataStore.speakerVolumeFlow.first()
+                val ttsLanguage = settingsDataStore.speakerLanguageFlow.first()
+                val ttsRate = settingsDataStore.speakerRateFlow.first()
+                val ttsPitch = settingsDataStore.speakerPitchFlow.first()
 
                 val speechText = if (amount != null) {
-                    userTemplate
-                        .replace("{amount}", amount.toString())
-                        .replace("{app_name}", appName)
-                        .replace("{sender}", senderName ?: "Pelanggan")
+                    TtsPolicy.renderTemplate(userTemplate, amount, appName, senderName)
                 } else {
                     "Ada notifikasi pembayaran dari $appName"
                 }
-                ttsManager?.speak(speechText, repeatCount, ttsVolume)
+                ttsManager?.speak(speechText, repeatCount, ttsVolume, ttsLanguage, ttsRate, ttsPitch)
             }
 
             // Forward to all configured enabling target webhooks
@@ -441,6 +447,7 @@ class QrisNotificationListenerService : NotificationListenerService() {
         if (shouldTriggerWorker) {
             scheduleRetryWorker(applicationContext)
         }
+        repository.pruneOldLogs()
     }
 
     private fun scheduleRetryWorker(context: Context) {
@@ -459,7 +466,7 @@ class QrisNotificationListenerService : NotificationListenerService() {
 
         WorkManager.getInstance(context).enqueueUniqueWork(
             "qris_webhook_retry_work",
-            ExistingWorkPolicy.REPLACE,
+            ExistingWorkPolicy.KEEP,
             retryRequest
         )
     }
