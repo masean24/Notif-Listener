@@ -1,21 +1,38 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# QRIS Notification Bridge
 
-# Run and deploy your AI Studio app
+Android notification listener untuk menangkap notifikasi pembayaran, membaca nominal/sender, membacakan nominal lewat Text-to-Speech, dan meneruskan data ke webhook server pribadi.
 
-This contains everything you need to run your app locally.
+## Fitur Utama
 
-View your app in AI Studio: https://ai.studio/apps/1b0b1fe8-9680-4605-ab8b-2f3c4323c566
+- Memantau notifikasi dari aplikasi pembayaran/e-wallet/bank yang dipilih.
+- Filter package, keyword positif, dan keyword negatif.
+- Routing profile untuk mengirim notifikasi tertentu ke webhook tertentu.
+- Payload webhook simple/extended/custom tetap dikontrol dari konfigurasi target.
+- Retry otomatis untuk webhook pending.
+- Speaker TTS dengan template, volume, repeat, bahasa, kecepatan, pitch, dan mode per profile.
+- Riwayat notifikasi dan status delivery lokal.
 
-## Run Locally
+## Setup Lokal
 
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+1. Buka folder project ini di Android Studio.
+2. Sync Gradle.
+3. Jalankan ke device Android fisik untuk hasil notification listener paling akurat.
+4. Di app, aktifkan izin akses notifikasi.
+5. Tambahkan webhook target server.
+6. Matikan battery optimization untuk pemantauan 24 jam.
 
+## Catatan Operasional
 
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
+- Format payload webhook tidak diubah oleh update reliability/TTS/UX.
+- Data sensitif seperti secret webhook dan log pembayaran tidak diikutkan ke backup Android.
+- Database memakai migration non-destruktif untuk menjaga data lokal saat app update.
+
+## Testing
+
+Jalankan unit test:
+
+```powershell
+.\gradlew.bat test
+```
+
+Test utama mencakup parser nominal/sender, kompatibilitas payload, dan policy TTS.

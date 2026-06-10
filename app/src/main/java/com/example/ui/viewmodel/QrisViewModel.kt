@@ -1,6 +1,8 @@
 package com.example.ui.viewmodel
 
 import android.app.Application
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -13,6 +15,7 @@ import com.example.data.model.RoutingProfile
 import com.example.data.pref.SettingsDataStore
 import com.example.data.repository.QrisRepository
 import com.example.util.PayloadBuilder
+import com.example.util.PaymentParser
 import com.example.util.TtsManager
 import com.example.util.WebhookClient
 import kotlinx.coroutines.Dispatchers
@@ -25,8 +28,20 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+data class ParsePreviewResult(
+    val amount: Int?,
+    val sender: String?,
+    val appName: String
+)
+
+data class InstalledAppOption(
+    val label: String,
+    val packageName: String
+)
+
 class QrisViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val app = application
     private val repository = QrisRepository(AppDatabase.getDatabase(application))
     private val dataStore = SettingsDataStore(application)
     private var ttsTester: TtsManager? = null
@@ -37,6 +52,9 @@ class QrisViewModel(application: Application) : AndroidViewModel(application) {
     val speakerRepeat = dataStore.speakerRepeatFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
     val speakerVolume = dataStore.speakerVolumeFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1.0f)
     val speakerTemplate = dataStore.speakerTemplateFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Pembayaran masuk {amount} rupiah dari {app_name}")
+    val speakerLanguage = dataStore.speakerLanguageFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "id-ID")
+    val speakerRate = dataStore.speakerRateFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1.0f)
+    val speakerPitch = dataStore.speakerPitchFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1.0f)
     val allowedPackages = dataStore.allowedPackagesFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val positiveKeywords = dataStore.positiveKeywordsFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val negativeKeywords = dataStore.negativeKeywordsFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -66,9 +84,14 @@ class QrisViewModel(application: Application) : AndroidViewModel(application) {
     // Test webhook output
     private val _testSenderResult = MutableStateFlow<String?>(null)
     val testSenderResult: StateFlow<String?> = _testSenderResult.asStateFlow()
+    private val _parsePreviewResult = MutableStateFlow<ParsePreviewResult?>(null)
+    val parsePreviewResult: StateFlow<ParsePreviewResult?> = _parsePreviewResult.asStateFlow()
+    private val _installedApps = MutableStateFlow<List<InstalledAppOption>>(emptyList())
+    val installedApps: StateFlow<List<InstalledAppOption>> = _installedApps.asStateFlow()
 
     init {
         ttsTester = TtsManager(application)
+        refreshInstalledApps()
     }
 
     override fun onCleared() {
@@ -81,6 +104,9 @@ class QrisViewModel(application: Application) : AndroidViewModel(application) {
     fun setSpeakerRepeat(repeat: Int) = viewModelScope.launch { dataStore.setSpeakerRepeat(repeat) }
     fun setSpeakerVolume(volume: Float) = viewModelScope.launch { dataStore.setSpeakerVolume(volume) }
     fun setSpeakerTemplate(template: String) = viewModelScope.launch { dataStore.setSpeakerTemplate(template) }
+    fun setSpeakerLanguage(languageTag: String) = viewModelScope.launch { dataStore.setSpeakerLanguage(languageTag) }
+    fun setSpeakerRate(rate: Float) = viewModelScope.launch { dataStore.setSpeakerRate(rate) }
+    fun setSpeakerPitch(pitch: Float) = viewModelScope.launch { dataStore.setSpeakerPitch(pitch) }
     
     fun saveAllowedPackages(packages: List<String>) = viewModelScope.launch { dataStore.saveAllowedPackages(packages) }
     fun savePositiveKeywords(keywords: List<String>) = viewModelScope.launch { dataStore.savePositiveKeywords(keywords) }
@@ -105,8 +131,47 @@ class QrisViewModel(application: Application) : AndroidViewModel(application) {
         val template = speakerTemplate.value
         val volume = speakerVolume.value
         val repeat = speakerRepeat.value
-        val text = template.replace("{amount}", "15000").replace("{app_name}", "GoPay")
-        ttsTester?.speak(text, repeat, volume)
+        val text = template
+            .replace("{amount}", "15000")
+            .replace("{app_name}", "GoPay")
+            .replace("{sender}", "AHMAD BUDI")
+        ttsTester?.speak(text, repeat, volume, speakerLanguage.value, speakerRate.value, speakerPitch.value)
+    }
+
+    fun previewNotificationParse(title: String, text: String, bigText: String, appName: String) {
+        _parsePreviewResult.value = ParsePreviewResult(
+            amount = PaymentParser.parseAmount(title, text, bigText),
+            sender = PaymentParser.parseSender(title, text, bigText),
+            appName = appName.ifBlank { "Contoh App" }
+        )
+    }
+
+    fun refreshInstalledApps() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val pm = app.packageManager
+            val applications = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                pm.getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0L))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getInstalledApplications(0)
+            }
+
+            val options = applications
+                .filter { appInfo ->
+                    pm.getLaunchIntentForPackage(appInfo.packageName) != null ||
+                        (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) == 0
+                }
+                .map { appInfo ->
+                    InstalledAppOption(
+                        label = pm.getApplicationLabel(appInfo).toString(),
+                        packageName = appInfo.packageName
+                    )
+                }
+                .distinctBy { it.packageName }
+                .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label })
+
+            _installedApps.value = options
+        }
     }
 
     fun testWebhook(target: WebhookTarget) {

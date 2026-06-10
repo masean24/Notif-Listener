@@ -10,12 +10,14 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
+import androidx.room.migration.Migration
 import com.example.data.model.NotificationLog
 import com.example.data.model.WebhookLog
 import com.example.data.model.WebhookTarget
 import com.example.data.model.RoutingProfile
 import com.example.data.model.ProfileDedupeLog
 import kotlinx.coroutines.flow.Flow
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Dao
 interface WebhookTargetDao {
@@ -54,6 +56,9 @@ interface NotificationLogDao {
 
     @Query("DELETE FROM notification_logs")
     suspend fun clearLogs()
+
+    @Query("DELETE FROM notification_logs WHERE timestamp < :cutoff")
+    suspend fun deleteLogsOlderThan(cutoff: Long)
 }
 
 @Dao
@@ -84,6 +89,9 @@ interface WebhookLogDao {
 
     @Query("DELETE FROM webhook_logs")
     suspend fun clearAllDeliveryLogs()
+
+    @Query("DELETE FROM webhook_logs WHERE timestamp < :cutoff AND status != 'pending'")
+    suspend fun deleteFinishedLogsOlderThan(cutoff: Long)
 }
 
 @Dao
@@ -117,11 +125,14 @@ interface ProfileDedupeLogDao {
 
     @Query("DELETE FROM profile_dedupe_logs")
     suspend fun clearAllDedupeLogs()
+
+    @Query("DELETE FROM profile_dedupe_logs WHERE timestamp < :cutoff")
+    suspend fun deleteDedupeLogsOlderThan(cutoff: Long)
 }
 
 @Database(
     entities = [WebhookTarget::class, NotificationLog::class, WebhookLog::class, RoutingProfile::class, ProfileDedupeLog::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -135,6 +146,12 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE routing_profiles ADD COLUMN ttsMode TEXT NOT NULL DEFAULT 'global'")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -142,7 +159,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "qris_bridge_database"
                 )
-                    .fallbackToDestructiveMigration()
+                    .addMigrations(MIGRATION_3_4)
                     .build()
                 INSTANCE = instance
                 instance

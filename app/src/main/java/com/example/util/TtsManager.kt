@@ -12,6 +12,7 @@ import java.util.Locale
 class TtsManager(private val context: Context) : TextToSpeech.OnInitListener {
     private var tts: TextToSpeech? = null
     private var isInitialized = false
+    private var currentLanguageTag: String = ""
 
     init {
         try {
@@ -23,22 +24,29 @@ class TtsManager(private val context: Context) : TextToSpeech.OnInitListener {
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
-            val result = tts?.setLanguage(Locale("id", "ID"))
-            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                Log.w("TtsManager", "Indonesian locale is missing or unsupported. Falling back to system default.")
-                tts?.setLanguage(Locale.getDefault())
-            }
+            applyLanguage("id-ID")
             isInitialized = true
         } else {
             Log.e("TtsManager", "TTS initialization failed.")
         }
     }
 
-    fun speak(text: String, repeatCount: Int = 1, volume: Float = 1.0f) {
+    fun speak(
+        text: String,
+        repeatCount: Int = 1,
+        volume: Float = 1.0f,
+        languageTag: String = "id-ID",
+        speechRate: Float = 1.0f,
+        pitch: Float = 1.0f
+    ) {
         if (!isInitialized || tts == null) {
             Log.w("TtsManager", "TTS speaker is not initialized yet.")
             return
         }
+
+        applyLanguage(languageTag)
+        tts?.setSpeechRate(speechRate.coerceIn(0.5f, 1.8f))
+        tts?.setPitch(pitch.coerceIn(0.5f, 1.8f))
 
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         
@@ -83,6 +91,26 @@ class TtsManager(private val context: Context) : TextToSpeech.OnInitListener {
             }
         } else {
             Log.w("TtsManager", "Failed to acquire audio focus for speaking.")
+        }
+    }
+
+    private fun applyLanguage(languageTag: String) {
+        val locale = if (languageTag == "system") {
+            Locale.getDefault()
+        } else {
+            Locale.forLanguageTag(languageTag.ifBlank { "id-ID" })
+        }
+
+        val normalizedTag = locale.toLanguageTag()
+        if (currentLanguageTag == normalizedTag) return
+
+        val result = tts?.setLanguage(locale)
+        if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+            Log.w("TtsManager", "Locale $normalizedTag is missing or unsupported. Falling back to system default.")
+            tts?.setLanguage(Locale.getDefault())
+            currentLanguageTag = Locale.getDefault().toLanguageTag()
+        } else {
+            currentLanguageTag = normalizedTag
         }
     }
 

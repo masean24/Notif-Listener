@@ -53,8 +53,9 @@ data class RoutingProfile(
     val negativeKeywordsRaw: String = "", // Comma-separated negative keywords
     val webhookTargetIdsRaw: String = "", // Comma-separated target webhook IDs (e.g. "1,2,5")
     val customTemplate: String? = null, // Optional payload template specific to this profile
-    val ttsEnabled: Boolean = false, // If true, use profile's custom TTS template
+    val ttsEnabled: Boolean = false, // Legacy flag kept for existing profile compatibility
     val ttsTemplate: String? = null, // Optional custom speaker template specific to this profile
+    val ttsMode: String = "global", // "global", "force_on", or "muted"
     val priority: Int = 0 // Higher value is higher priority
 ) {
     val packages: List<String>
@@ -76,4 +77,3 @@ data class ProfileDedupeLog(
     val dedupeKey: String,
     val timestamp: Long
 )
-
